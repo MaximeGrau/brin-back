@@ -1,0 +1,418 @@
+openapi: 3.0.3
+info:
+  title: Brin API
+  version: 0.1.0
+  description: |
+    Contrat d'API entre l'app mobile Brin et le backend Spring Boot.
+    Approche contract-first : CE fichier (dépôt brin-back) fait foi.
+    Les interfaces Spring sont générées depuis lui au build Maven ;
+    brin-mobile en garde une copie pour générer son client TypeScript.
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Backend local
+security:
+  - bearerAuth: []
+
+paths:
+  /feed:
+    get:
+      operationId: getFeed
+      summary: Feed de shorts éducatifs, précalculé et paginé
+      tags: [feed]
+      parameters:
+        - name: category
+          in: query
+          required: false
+          description: Filtre par catégorie (absent = "Pour toi")
+          schema:
+            $ref: '#/components/schemas/Category'
+        - name: cursor
+          in: query
+          required: false
+          description: Curseur opaque renvoyé par la page précédente
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        '200':
+          description: Une page du feed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /categories:
+    get:
+      operationId: getCategories
+      summary: Catégories disponibles avec leur libellé
+      tags: [feed]
+      security: []
+      responses:
+        '200':
+          description: Liste des catégories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CategoryInfo'
+
+  /videos/{videoId}/learned:
+    parameters:
+      - $ref: '#/components/parameters/VideoId'
+    put:
+      operationId: markLearned
+      summary: Marquer une vidéo comme "J'ai appris"
+      tags: [interactions]
+      responses:
+        '204':
+          description: Marqué
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: unmarkLearned
+      summary: Retirer le marquage "J'ai appris"
+      tags: [interactions]
+      responses:
+        '204':
+          description: Retiré
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /videos/{videoId}/saved:
+    parameters:
+      - $ref: '#/components/parameters/VideoId'
+    put:
+      operationId: saveVideo
+      summary: Enregistrer une vidéo dans la bibliothèque
+      tags: [interactions]
+      responses:
+        '204':
+          description: Enregistrée
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: unsaveVideo
+      summary: Retirer une vidéo de la bibliothèque
+      tags: [interactions]
+      responses:
+        '204':
+          description: Retirée
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /videos/{videoId}/deep-dive:
+    parameters:
+      - $ref: '#/components/parameters/VideoId'
+    get:
+      operationId: getDeepDive
+      summary: Contenu "Approfondir" (résumé, notions clés, ressources)
+      tags: [videos]
+      responses:
+        '200':
+          description: Contenu d'approfondissement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeepDive'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /shares:
+    post:
+      operationId: createShare
+      summary: Soumettre une vidéo partagée depuis Instagram ou TikTok
+      description: |
+        Appelé quand l'utilisateur utilise "Partager → Brin". L'analyse est
+        asynchrone : la réponse renvoie le statut initial (ANALYSING).
+      tags: [library]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShareRequest'
+      responses:
+        '202':
+          description: Partage accepté, analyse en cours
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LibraryEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /library:
+    get:
+      operationId: getLibrary
+      summary: Bibliothèque de l'utilisateur (vidéos enregistrées et partagées)
+      tags: [library]
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: Une page de la bibliothèque
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LibraryPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    VideoId:
+      name: videoId
+      in: path
+      required: true
+      description: Identifiant interne Brin de la vidéo
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: Requête invalide
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: Authentification requise
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: Ressource introuvable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+    Category:
+      type: string
+      enum: [SCIENCES, HISTOIRE, ECONOMIE, LANGUES, GEOGRAPHIE, ARTS, TECHNOLOGIE, SOCIETE]
+
+    CategoryInfo:
+      type: object
+      required: [code, label]
+      properties:
+        code:
+          $ref: '#/components/schemas/Category'
+        label:
+          type: string
+          example: Sciences
+
+    VideoSource:
+      type: string
+      enum: [YOUTUBE, INSTAGRAM, TIKTOK]
+
+    Reliability:
+      type: string
+      description: Évaluation de fiabilité produite par l'IA
+      enum: [FIABLE, A_VERIFIER, DOUTEUX]
+
+    Creator:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          example: Physique en 1 minute
+        handle:
+          type: string
+          example: '@physique.en.1min'
+        channelUrl:
+          type: string
+          format: uri
+
+    FeedItem:
+      type: object
+      required: [id, source, externalId, title, creator, category, score, reliability, learned, saved]
+      properties:
+        id:
+          type: string
+          description: Identifiant interne Brin
+        source:
+          $ref: '#/components/schemas/VideoSource'
+        externalId:
+          type: string
+          description: Identifiant sur la plateforme d'origine (ID YouTube pour le lecteur intégré)
+          example: dQw4w9WgXcQ
+        title:
+          type: string
+          example: Pourquoi le ciel est bleu
+        creator:
+          $ref: '#/components/schemas/Creator'
+        category:
+          $ref: '#/components/schemas/Category'
+        score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 10
+          description: Score culture attribué par l'IA
+          example: 8.7
+        reliability:
+          $ref: '#/components/schemas/Reliability'
+        keyTakeaway:
+          type: string
+          description: La phrase "À retenir"
+        durationSeconds:
+          type: integer
+          minimum: 0
+        learned:
+          type: boolean
+          description: L'utilisateur a marqué "J'ai appris"
+        saved:
+          type: boolean
+          description: L'utilisateur a enregistré la vidéo
+
+    FeedPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeedItem'
+        nextCursor:
+          type: string
+          nullable: true
+
+    DeepDive:
+      type: object
+      required: [videoId, summary]
+      properties:
+        videoId:
+          type: string
+        summary:
+          type: string
+          description: Résumé généré par l'IA
+        keyConcepts:
+          type: array
+          items:
+            type: object
+            required: [term, definition]
+            properties:
+              term:
+                type: string
+              definition:
+                type: string
+        resources:
+          type: array
+          items:
+            type: object
+            required: [title, url, type]
+            properties:
+              title:
+                type: string
+              url:
+                type: string
+                format: uri
+              type:
+                type: string
+                enum: [ARTICLE, LIVRE, VIDEO, PODCAST, COURS]
+
+    ShareRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Lien partagé depuis Instagram ou TikTok
+        caption:
+          type: string
+          description: Légende éventuellement transmise par la feuille de partage
+
+    LibraryEntryStatus:
+      type: string
+      enum: [ANALYSING, ACCEPTED, REJECTED]
+
+    LibraryEntry:
+      type: object
+      required: [id, origin, status, addedAt]
+      properties:
+        id:
+          type: string
+        origin:
+          type: string
+          enum: [SAVED_FROM_FEED, SHARED]
+        status:
+          $ref: '#/components/schemas/LibraryEntryStatus'
+        rejectionReason:
+          type: string
+          description: Raison affichée si la vidéo n'est pas retenue
+        addedAt:
+          type: string
+          format: date-time
+        video:
+          $ref: '#/components/schemas/FeedItem'
+
+    LibraryPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LibraryEntry'
+        nextCursor:
+          type: string
+          nullable: true
+
+    Problem:
+      type: object
+      description: Erreur au format RFC 9457 (Problem Details), natif dans Spring Boot
+      required: [title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string

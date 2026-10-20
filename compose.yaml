@@ -1,0 +1,16 @@
+# Base de données de développement.
+# Démarrée automatiquement au lancement de l'application (spring-boot-docker-compose).
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: brin
+      POSTGRES_USER: brin
+      POSTGRES_PASSWORD: brin
+    ports:
+      - "5432"
+    volumes:
+      - brin-postgres:/var/lib/postgresql/data
+
+volumes:
+  brin-postgres:

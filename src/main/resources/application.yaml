@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: brin-back
+
+  # En dev, la base PostgreSQL est démarrée automatiquement depuis compose.yaml
+  # (spring-boot-docker-compose) et la connexion est configurée toute seule.
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # le schéma est géré par Flyway (src/main/resources/db/migration)
+
+  mvc:
+    problemdetails:
+      enabled: true        # erreurs au format RFC 9457, comme le schéma Problem du contrat
+
+  ai:
+    google:
+      genai:
+        api-key: ${GEMINI_API_KEY}   # clé gratuite sur https://aistudio.google.com/apikey
+        chat:
+          model: ${GEMINI_CHAT_MODEL:gemini-2.5-flash}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
