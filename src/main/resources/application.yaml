@@ -1,13 +1,32 @@
+# Configuration commune à tous les environnements.
+# Profils : "test" (par défaut, base Docker locale persistante) et "prod" (base fixe) → application-{profil}.yaml
 spring:
   application:
     name: brin-back
 
-  # En dev, la base PostgreSQL est démarrée automatiquement depuis compose.yaml
-  # (spring-boot-docker-compose) et la connexion est configurée toute seule.
+  profiles:
+    default: test          # sans SPRING_PROFILES_ACTIVE, on est en environnement de test
+
+  flyway:
+    locations: classpath:db/migration
+
   jpa:
     open-in-view: false
     hibernate:
       ddl-auto: validate   # le schéma est géré par Flyway (src/main/resources/db/migration)
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC   # colonnes timestamptz
+
+  jackson:
+    default-property-inclusion: non_null   # champ optionnel du contrat sans valeur = absent du JSON (pas null)
+
+  servlet:
+    multipart:
+      max-file-size: 105MB     # un peu au-delà de brin.upload.max-size, pour renvoyer un message précis
+      max-request-size: 110MB  # vidéo + couverture + champs texte
+      file-size-threshold: 1MB # au-delà, le fichier reçu est écrit sur disque (pas gardé en mémoire)
 
   mvc:
     problemdetails:
@@ -16,12 +35,96 @@ spring:
   ai:
     google:
       genai:
-        api-key: ${GEMINI_API_KEY}   # clé gratuite sur https://aistudio.google.com/apikey
+        api-key: ${GEMINI_API_KEY:AQ.Ab8RN6I3ZsK_3BIonB7sHnFQU8LwwLPC1vubYzAd9A-XcgwSJg}   # clé gratuite sur https://aistudio.google.com/apikey
         chat:
-          model: ${GEMINI_CHAT_MODEL:gemini-2.5-flash}
+          model: ${GEMINI_CHAT_MODEL:gemini-3.5-flash-lite}   # version figée (pas un alias -latest) pour garder une classification stable
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info
+
+brin:
+  auth:
+    access-token-ttl: 15m
+    refresh-token-ttl: 60d
+    # URL publique du backend, en HTTPS : sert à construire l'URL de retour OAuth
+    # ({public-base-url}/api/v1/auth/oauth/{provider}/callback) à déclarer chez Google, TikTok et Meta.
+    # En local : tunnel HTTPS (ex. ngrok http 8080).
+    public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080}
+    mail-from: ${MAIL_FROM:Brin <no-reply@brin.app>}
+    verification:
+      code-ttl: 15m
+      max-attempts: 5
+      resend-cooldown: 60s
+    # Fournisseurs externes : identifiant vide = fournisseur désactivé (l'app reçoit error=unavailable).
+    oauth:
+      google:
+        client-id: ${GOOGLE_CLIENT_ID:}
+        client-secret: ${GOOGLE_CLIENT_SECRET:}
+      tiktok:
+        client-id: ${TIKTOK_CLIENT_KEY:}
+        client-secret: ${TIKTOK_CLIENT_SECRET:}
+      facebook:
+        client-id: ${FACEBOOK_APP_ID:}
+        client-secret: ${FACEBOOK_APP_SECRET:}
+
+  youtube:
+    api-key: ${YOUTUBE_API_KEY:AIzaSyDMyBTe9mQFigdCbYgZwEasSAHEjc1kY9g}
+
+  import:
+    cron: ${IMPORT_CRON:0 0 4 * * *}   # tous les jours à 4 h (Europe/Paris) ; "-" désactive
+    run-on-startup: false
+    max-duration: 180s                 # au-delà, ce n'est pas un short
+    max-pages-per-creator: 4           # 4 × 50 vidéos lues au plus par créateur et par import
+    languages: [fr]
+    # Liste éditoriale des créateurs suivis (handles YouTube vérifiés via l'API, octobre 2026).
+    # Critère : publie régulièrement des shorts (≤ 3 min), sinon la chaîne n'apporte rien au feed.
+    channels:
+      - "@ScienceEtonnante"
+      - "@hugodecryptegrandsformats"
+      - "@lespritcritique"
+      - "@JamyEpicurieux"           # sciences, vie quotidienne
+      - "@astronogeek"              # astronomie
+      - "@NotaBeneMovies"           # histoire
+      - "@Scilabus"                 # sciences expérimentales
+      - "@Linguisticae"             # langues
+      - "@DataGueule"               # société, économie
+      - "@DocSeven"                 # anecdotes, histoire, sciences
+      - "@DrNozman"                 # sciences grand public
+      - "@BaladeMentale"            # sciences, cosmos
+      - "@epenser1"                 # physique (e-penser 2.0)
+      - "@PasseSauvage"             # histoire
+      - "@LeDessousdesCartesARTE"   # géographie, géopolitique
+      - "@GaspardG"                 # contenu mixte (actu, pop culture) : teste le tri de l'IA
+
+  # Vidéos envoyées sur Brin : critères d'un short (comme YouTube Shorts) et stockage.
+  upload:
+    storage-dir: ${BRIN_UPLOAD_DIR:./data/uploads}   # ignoré par git ; en prod : volume persistant ou stockage objet
+    max-size: 100MB
+    min-duration: 3s
+    max-duration: 180s
+    min-aspect-ratio: 1.25    # hauteur / largeur : vertical exigé (4:5 à 9:16)
+    min-short-side: 360       # pixels
+    max-pending: 5            # vidéos en analyse en même temps par utilisateur
+    media-url-ttl: 6h         # validité des liens signés vers les fichiers
+
+  # Feed "Pour toi" : poids(catégorie) = base (choisie ou non) + affinité apprise ;
+  # part = (1 - exploration) × poids / Σ poids + exploration / 8 (voir CategoryShares).
+  feed:
+    selected-weight: 3.0     # catégorie choisie à l'inscription
+    base-weight: 1.0         # catégorie non choisie (ou toutes si aucune choisie : parts égales)
+    exploration: 0.15        # 15 % du feed répartis à parts égales, quoi qu'il arrive
+    learned-boost: 0.6       # "J'ai appris" (retiré si on décoche)
+    loop-boost: 0.1          # chaque boucle d'une vidéo…
+    max-counted-loops: 3     # …dans la limite de 3 par vidéo
+    skip-penalty: 0.2        # vidéo swipée en moins d'une demi-seconde (une fois par vidéo)
+    min-affinity: -2.0       # plancher de l'affinité (poids jamais sous 0, part d'exploration toujours garantie)
+
+  classification:
+    enabled: ${BRIN_CLASSIFICATION_ENABLED:true}
+    fixed-delay: 60s     # pause entre deux passages (après la fin du précédent)
+    batch-size: 10       # vidéos par passage ; à ajuster selon la limite de débit de ta clé Gemini
+    min-score: 6.0       # score minimal pour entrer dans le feed
+    max-attempts: 3      # échecs tolérés avant d'abandonner une vidéo

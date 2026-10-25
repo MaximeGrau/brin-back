@@ -27,7 +27,7 @@ Lance `./mvnw verify` après chaque modification.
 - **Schéma géré par Flyway** (`db/migration`, `ddl-auto: validate`) : toute modification d'entité passe par une nouvelle migration `V{n}__description.sql`.
 - **L'IA n'est jamais appelée pendant une requête du feed** : classification en tâche de fond, résultat stocké et mis en cache par vidéo (clé unique `source + external_id`).
 - **Appels IA hors transaction** : seule l'écriture du résultat est transactionnelle (`TransactionTemplate`).
-- **Règles YouTube** : pas de téléchargement/réhébergement de vidéos, pas de scraping d'Instagram/TikTok, respect des quotas de la YouTube Data API (privilégier `playlistItems.list` + `videos.list`, 1 unité / 50 vidéos ; éviter `search.list`, 100 unités). Les données YouTube stockées doivent être rafraîchies régulièrement (règles de l'API).
+- **Règles YouTube** : pas de téléchargement/réhébergement de vidéos YouTube/Instagram/TikTok (les vidéos envoyées par les utilisateurs eux-mêmes sur Brin, elles, sont stockées par Brin), pas de scraping d'Instagram/TikTok, respect des quotas de la YouTube Data API (privilégier `playlistItems.list` + `videos.list`, 1 unité / 50 vidéos ; éviter `search.list`, 100 unités). Les données YouTube stockées doivent être rafraîchies régulièrement (règles de l'API).
 - Messages de commit en français.
 
 ## État actuel : squelette uniquement
@@ -38,6 +38,30 @@ Le squelette a été créé sans pouvoir compiler (Maven Central indisponible da
 - les options du générateur OpenAPI pour Spring Boot 4 (`useSpringBoot4`, `useJackson3`) et le chemin de base `/api/v1` sur les interfaces générées ;
 - le démarrage : `GEMINI_API_KEY` est obligatoire, Docker doit tourner (compose.yaml).
 
+## Authentification
+
+- JWT HS256 émis par le backend (`JwtTokens`, 15 min) + jeton de rafraîchissement opaque à usage unique (60 j, hash en base). `CurrentUser` lit le sujet du JWT.
+- OAuth Google / TikTok / Facebook (Meta) entièrement côté backend : `/auth/oauth/{provider}/authorize` → fournisseur → `/callback` → redirection vers le lien profond de l'app avec un ticket (`POST /auth/oauth/exchange`). Fournisseur sans identifiants = désactivé (`error=unavailable`).
+- URL de retour à déclarer chez chaque fournisseur : `{PUBLIC_BASE_URL}/api/v1/auth/oauth/{google|tiktok|facebook}/callback` (HTTPS : en local, tunnel type ngrok).
+- Facebook plutôt qu'Instagram : la connexion Instagram grand public n'existe plus (API Basic Display fermée en décembre 2024).
+- E-mails en dev : Mailpit (compose.yaml), http://localhost:8025. Si Postgres tournait déjà, Spring Boot ne relance pas `docker compose up` : `docker compose up -d mailpit`.
+
+## Feed "Pour toi"
+
+- Part de chaque catégorie (`CategoryShares`) : poids = base (3 si choisie, 1 sinon) + affinité apprise ; part = 85 % au prorata des poids + 15 % à parts égales (aucune catégorie sous ~1,9 %). Réglages : `brin.feed.*`.
+- Affinité (`user_category_affinity`) : +0,6 par "J'ai appris" (retiré si décoché), +0,1 par boucle dans la limite de 3 par vidéo (`video_interaction.loop_count`), −0,2 par vidéo swipée en moins d'une demi-seconde (une fois par vidéo, `skip_count`), plancher −2 ; le poids ne descend pas sous 0.
+- Ordre aléatoire par session : tri SQL sur `md5(graine || id)` (`ShuffleOrder`, même calcul en Java pour la position) ; nouvelle graine à chaque première page, gardée dans le curseur (`MixedFeedCursor`) pour paginer sans doublon.
+- Mélange (`FeedMixer`) : catégorie de chaque emplacement tirée au hasard selon les parts ; jamais deux vidéos du même créateur à la suite tant qu'une autre possibilité existe (vidéos mises de côté, 5 au plus par catégorie, servies ensuite en priorité, transmises dans le curseur ; dernier créateur aussi, pour la page suivante). Une catégorie vide est retirée et sa part redistribuée.
+- `GET /feed?category=X` : même mécanique, limitée à cette catégorie. Le score IA ne joue plus sur l'ordre (seulement sur l'entrée dans le feed, `min-score`).
+
+## Vidéos envoyées sur Brin (source BRIN)
+
+Objectif : un catalogue propre, lu dans notre lecteur plein écran, pour se passer peu à peu des Shorts YouTube.
+- `POST /uploads` (multipart, ouvert à tout utilisateur à l'adresse vérifiée) : `UploadService` vérifie le fichier lui-même (`Mp4Inspector` lit durée et dimensions dans les boîtes MP4/MOV, rotation comprise) selon `brin.upload.*` (vertical ≥ 1,25, 3 s à 3 min, 100 Mo, 5 en analyse max), stocke via `VideoStorage` (`LocalVideoStorage` dans `./data/uploads` ; à remplacer par S3/R2 en prod), crée la vidéo PENDING sous un créateur `Creator.forUser`.
+- Classification prioritaire : `UploadedVideoClassifier` envoie le fichier à l'API Files de Gemini, attend `ACTIVE`, fait regarder la vidéo (modération comprise, prompt `classification-upload-v1`), supprime le fichier chez Google. Après `max-attempts` échecs, la vidéo est refusée (pas d'analyse infinie sur le tableau de bord).
+- Lecture : liens signés HMAC à durée limitée (`MediaUrls`, `GET /media/{video|thumbnail}/{id}?exp&sig`, Range géré par Spring), dans `FeedItem.playbackUrl` et `Upload.playbackUrl`. Liens construits sur l'hôte de la requête (en prod derrière un proxy : `server.forward-headers-strategy`).
+- Tableau de bord : `GET /me/uploads` (statut ANALYSING/PUBLISHED/REJECTED, raison du refus, "J'ai appris" reçus), `DELETE /me/uploads/{id}`.
+
 ## Prochaines étapes
 
 - [ ] Premier build vert (`./mvnw verify`) et démarrage local.
@@ -46,7 +70,13 @@ Le squelette a été créé sans pouvoir compiler (Maven Central indisponible da
 - [ ] Classification IA sur métadonnées (Spring AI, sortie structurée : éducatif ?, catégorie, score 0–10, fiabilité, "À retenir"), en tâche de fond.
 - [ ] Jeu de référence de ~200 vidéos notées à la main pour calibrer le prompt (viser 85–90 % d'accord).
 - [ ] Étape 2 de l'entonnoir : analyse vidéo (Gemini à partir du lien YouTube) sur les vidéos retenues.
-- [ ] Authentification (JWT) puis interactions utilisateur : J'ai appris / Enregistrer, bibliothèque, partages.
+- [x] Authentification : e-mail + mot de passe, Google / TikTok / Facebook (OAuth côté backend, `service/auth`), code de validation par e-mail, catégories préférées (`PUT /me/categories`).
+- [x] Feed personnalisé (catégories choisies, "J'ai appris", boucles) et interactions J'ai appris / Enregistrer.
+- [ ] Affinité qui s'estompe avec le temps (les goûts changent) ; ne plus resservir les vidéos déjà vues d'une session à l'autre.
+- [ ] Élargir la liste de créateurs (3 aujourd'hui : les répétitions de créateur deviennent inévitables en fin de feed).
+- [x] Bibliothèque : shorts enregistrés (`GET /library`) et compteurs du profil (`GET /me/stats`).
+- [ ] Partages depuis Instagram / TikTok vers la bibliothèque.
+- [ ] Vidéos envoyées : stockage objet + CDN en prod, transcodage (HLS, plusieurs qualités) si les fichiers bruts pèsent trop, signalement par les utilisateurs et CGU (hébergeur de contenus : obligations du DSA), éventuellement un coup de pouce aux vidéos BRIN dans le feed.
 - [ ] Endpoint Approfondir (`GET /videos/{id}/deep-dive`).
 - [ ] Tests d'intégration avec Testcontainers (PostgreSQL).
 

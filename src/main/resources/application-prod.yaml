@@ -1,0 +1,33 @@
+# Production : base PostgreSQL fixe, connexion fournie par variables d'environnement.
+# Pas de valeur par défaut : l'application refuse de démarrer si une variable manque.
+#   SPRING_PROFILES_ACTIVE=prod
+#   DB_URL=jdbc:postgresql://<hôte>:5432/brin   (ajouter ?sslmode=require pour une base managée)
+#   DB_USERNAME=...  DB_PASSWORD=...
+#   JWT_SECRET=<32 octets aléatoires en base64>  (openssl rand -base64 32)
+#   MAIL_HOST=...  MAIL_PORT=587  MAIL_USERNAME=...  MAIL_PASSWORD=...
+#   PUBLIC_BASE_URL=https://api.brin.app  (+ identifiants OAuth, voir application.yaml)
+spring:
+  docker:
+    compose:
+      enabled: false
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
+brin:
+  auth:
+    jwt-secret: ${JWT_SECRET}
+    allowed-redirect-uris: [ "brin://" ]

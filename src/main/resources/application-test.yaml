@@ -1,0 +1,38 @@
+# Environnement de test : base PostgreSQL persistante gérée par spring-boot-docker-compose.
+# Au démarrage : `docker compose up` sur compose.yaml (conteneur créé ou relancé), connexion configurée
+# automatiquement (aucun spring.datasource à renseigner), Flyway applique les migrations manquantes
+# comme il le fera en prod. À l'arrêt : `docker compose stop`, les données sont conservées.
+spring:
+  docker:
+    compose:
+      enabled: true
+      file: compose.yaml
+      lifecycle-management: start-and-stop
+      start:
+        command: up
+      stop:
+        command: stop
+      # Aussi actif pendant les tests Spring (@SpringBootTest), désactivé par défaut par Spring Boot.
+      skip:
+        in-tests: false
+
+  mail:
+    host: localhost
+    port: 1025   # Mailpit (compose.yaml), e-mails visibles sur http://localhost:8025
+
+brin:
+  auth:
+    # Clé de dev uniquement : en prod, JWT_SECRET est obligatoire (application-prod.yaml).
+    jwt-secret: ${JWT_SECRET:ZGV2LXVuaXF1ZW1lbnQtY2xlLWRlLXNpZ25hdHVyZS1kZXMtand0LWJyaW4tMzJvY3RldHMtbWluaW11bQ==}
+    # Expo Go : liens profonds en exp://<ip>:8081/--/auth
+    allowed-redirect-uris: [ "brin://", "exp://" ]
+    # Compte de démo recréé à chaque démarrage (DemoAccountInitializer), adresse déjà vérifiée.
+    demo-account:
+      email: ${BRIN_DEMO_EMAIL:maxime070530@gmail.com}
+      password: ${BRIN_DEMO_PASSWORD:azerty123}
+      display-name: Maxime
+
+  import:
+    # Import aussi au démarrage (l'app ne tourne pas à 4 h en local). Incrémental : seules les vidéos
+    # publiées depuis le dernier import sont lues, ~2 unités de quota par créateur.
+    run-on-startup: true

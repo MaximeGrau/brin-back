@@ -24,3 +24,6 @@ bin/
 .env
 .env.*
 application-local.yaml
+
+# Vidéos envoyées sur Brin (stockage local de dev)
+/data/

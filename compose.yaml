@@ -1,5 +1,7 @@
-# Base de données de développement.
-# Démarrée automatiquement au lancement de l'application (spring-boot-docker-compose).
+# Base de données de l'environnement de test (profil "test").
+# Démarrée au lancement de l'application, arrêtée (pas supprimée) à son arrêt : spring-boot-docker-compose,
+# voir application-test.yaml. Les données sont conservées dans le volume "brin-postgres".
+# Repartir de zéro : docker compose down --volumes
 services:
   postgres:
     image: postgres:17
@@ -8,9 +10,16 @@ services:
       POSTGRES_USER: brin
       POSTGRES_PASSWORD: brin
     ports:
-      - "5432"
+      - "5432:5432"   # port fixe : connexion depuis un client SQL sur localhost:5432 (brin / brin)
     volumes:
       - brin-postgres:/var/lib/postgresql/data
+
+  # Faux serveur SMTP : les e-mails (codes de validation) ne partent pas, on les lit sur http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # interface web
 
 volumes:
   brin-postgres:

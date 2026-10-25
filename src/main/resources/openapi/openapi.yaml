@@ -14,10 +14,301 @@ security:
   - bearerAuth: []
 
 paths:
+  /auth/register:
+    post:
+      operationId: register
+      summary: Créer un compte avec e-mail et mot de passe
+      description: Envoie aussi un code de validation à l'adresse saisie.
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Compte créé, utilisateur connecté
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /auth/login:
+    post:
+      operationId: login
+      summary: Se connecter avec e-mail et mot de passe
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Utilisateur connecté
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/refresh:
+    post:
+      operationId: refreshTokens
+      summary: Nouveau jeton d'accès à partir du jeton de rafraîchissement
+      description: Le jeton de rafraîchissement utilisé est révoqué et remplacé (rotation).
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Nouveaux jetons
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: Révoquer un jeton de rafraîchissement
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '204':
+          description: Déconnecté
+
+  /auth/oauth/{provider}/authorize:
+    parameters:
+      - $ref: '#/components/parameters/AuthProviderPath'
+    get:
+      operationId: oauthAuthorize
+      summary: Démarrer une connexion Google / TikTok / Facebook
+      description: |
+        Ouvert par l'app dans un navigateur (WebBrowser.openAuthSessionAsync). Redirige vers la page
+        de connexion du fournisseur, qui revient sur /auth/oauth/{provider}/callback.
+      tags: [auth]
+      security: []
+      parameters:
+        - name: redirectUri
+          in: query
+          required: true
+          description: Lien profond de l'app où revenir à la fin (ex. brin://auth), doit être autorisé côté serveur
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirection vers le fournisseur (ou vers l'app avec `error` s'il n'est pas configuré)
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/oauth/{provider}/callback:
+    parameters:
+      - $ref: '#/components/parameters/AuthProviderPath'
+    get:
+      operationId: oauthCallback
+      summary: Retour du fournisseur après connexion (appelé par le navigateur)
+      description: |
+        Échange le code du fournisseur, crée ou retrouve le compte, puis redirige vers l'app avec
+        `?ticket=…` (à échanger via POST /auth/oauth/exchange) ou `?error=…`.
+      tags: [auth]
+      security: []
+      parameters:
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirection vers l'app
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/oauth/exchange:
+    post:
+      operationId: oauthExchange
+      summary: Échanger le ticket reçu par l'app contre des jetons
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketExchangeRequest'
+      responses:
+        '200':
+          description: Utilisateur connecté
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /me:
+    get:
+      operationId: getMe
+      summary: Profil de l'utilisateur connecté
+      tags: [account]
+      responses:
+        '200':
+          description: Profil
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /me/stats:
+    get:
+      operationId: getMyStats
+      summary: Compteurs du profil (vidéos apprises, enregistrées, publiées)
+      tags: [account]
+      responses:
+        '200':
+          description: Compteurs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /me/email:
+    put:
+      operationId: updateEmail
+      summary: Définir ou changer l'adresse e-mail
+      description: L'adresse repasse "non vérifiée" et un code de validation y est envoyé.
+      tags: [account]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailUpdateRequest'
+      responses:
+        '200':
+          description: Profil à jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /me/email/verification:
+    post:
+      operationId: sendEmailVerification
+      summary: Renvoyer un code de validation
+      tags: [account]
+      responses:
+        '204':
+          description: Code envoyé
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /me/email/verification/confirm:
+    post:
+      operationId: confirmEmailVerification
+      summary: Valider l'adresse avec le code reçu par e-mail
+      tags: [account]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailVerificationRequest'
+      responses:
+        '200':
+          description: Adresse vérifiée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /me/categories:
+    put:
+      operationId: updatePreferredCategories
+      summary: Catégories à mettre en avant dans le feed
+      description: Liste vide autorisée (toutes les catégories à parts égales) ; marque l'étape comme faite.
+      tags: [account]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreferredCategoriesRequest'
+      responses:
+        '200':
+          description: Profil à jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /feed:
     get:
       operationId: getFeed
-      summary: Feed de shorts éducatifs, précalculé et paginé
+      summary: Feed de shorts éducatifs, personnalisé et paginé
+      description: |
+        Sans `category` ("Pour toi") : les catégories sont mélangées selon les préférences de l'utilisateur
+        (catégories choisies, "J'ai appris", boucles), chaque catégorie gardant une part minimale.
+        Avec `category` : uniquement cette catégorie, meilleur score d'abord.
       tags: [feed]
       parameters:
         - name: category
@@ -118,6 +409,38 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /videos/{videoId}/loops:
+    parameters:
+      - $ref: '#/components/parameters/VideoId'
+    post:
+      operationId: recordLoop
+      summary: Signaler que la vidéo vient de reboucler (revue en entier)
+      description: Signal faible d'intérêt pour la catégorie de la vidéo, compté quelques fois au plus par vidéo.
+      tags: [interactions]
+      responses:
+        '204':
+          description: Pris en compte
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /videos/{videoId}/skips:
+    parameters:
+      - $ref: '#/components/parameters/VideoId'
+    post:
+      operationId: recordSkip
+      summary: Signaler que la vidéo a été passée presque aussitôt (swipe en moins d'une demi-seconde)
+      description: Signal négatif pour la catégorie de la vidéo, compté une seule fois par vidéo.
+      tags: [interactions]
+      responses:
+        '204':
+          description: Pris en compte
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /videos/{videoId}/deep-dive:
     parameters:
       - $ref: '#/components/parameters/VideoId'
@@ -134,6 +457,157 @@ paths:
                 $ref: '#/components/schemas/DeepDive'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /uploads/rules:
+    get:
+      operationId: getUploadRules
+      summary: Critères d'une vidéo envoyée (format, durée, taille), à vérifier aussi côté app avant l'envoi
+      tags: [uploads]
+      security: []
+      responses:
+        '200':
+          description: Critères en vigueur
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadRules'
+
+  /uploads:
+    post:
+      operationId: uploadVideo
+      summary: Publier un short (fichier vidéo) sur Brin, ouvert à tous les utilisateurs
+      description: |
+        Le serveur vérifie le format (vertical), la durée et la taille, puis la vidéo part en analyse IA
+        (statut ANALYSING). Elle n'apparaît dans le feed des autres qu'une fois PUBLISHED.
+        Adresse e-mail vérifiée requise.
+      tags: [uploads]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, title]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Vidéo MP4 ou MOV
+                thumbnail:
+                  type: string
+                  format: binary
+                  description: Image JPEG de couverture, générée par l'app (facultative)
+                title:
+                  type: string
+                  minLength: 3
+                  maxLength: 120
+                description:
+                  type: string
+                  maxLength: 2000
+      responses:
+        '202':
+          description: Vidéo reçue, analyse en cours
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Upload'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /me/uploads:
+    get:
+      operationId: getMyUploads
+      summary: Vidéos publiées par l'utilisateur, en analyse et refusées (tableau de bord du profil)
+      tags: [uploads]
+      responses:
+        '200':
+          description: Vidéos de l'utilisateur, les plus récentes d'abord
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Upload'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /me/uploads/{uploadId}:
+    parameters:
+      - name: uploadId
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      operationId: deleteMyUpload
+      summary: Supprimer une de ses vidéos (fichier compris)
+      tags: [uploads]
+      responses:
+        '204':
+          description: Supprimée
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /media/{kind}/{videoId}:
+    parameters:
+      - name: kind
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [video, thumbnail]
+      - name: videoId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: exp
+        in: query
+        required: true
+        description: Expiration du lien (secondes depuis 1970)
+        schema:
+          type: integer
+          format: int64
+      - name: sig
+        in: query
+        required: true
+        description: Signature HMAC du lien
+        schema:
+          type: string
+    get:
+      operationId: getMedia
+      summary: Fichier d'une vidéo envoyée sur Brin ou de sa couverture (lien signé à durée limitée)
+      description: Liens fournis par le feed et le tableau de bord ; requêtes partielles (Range) acceptées.
+      tags: [media]
+      security: []
+      responses:
+        '200':
+          description: Fichier
+          content:
+            video/mp4:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        '206':
+          description: Partie du fichier (en-tête Range)
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -167,6 +641,7 @@ paths:
     get:
       operationId: getLibrary
       summary: Bibliothèque de l'utilisateur (vidéos enregistrées et partagées)
+      description: Pour l'instant les shorts enregistrés depuis le feed, les plus récents d'abord.
       tags: [library]
       parameters:
         - name: cursor
@@ -200,6 +675,12 @@ components:
       bearerFormat: JWT
 
   parameters:
+    AuthProviderPath:
+      name: provider
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/AuthProvider'
     VideoId:
       name: videoId
       in: path
@@ -227,8 +708,151 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: Action non autorisée
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    PayloadTooLarge:
+      description: Fichier trop volumineux
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: Conflit (ex. adresse e-mail déjà utilisée)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    TooManyRequests:
+      description: Trop de tentatives, réessayer plus tard
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
 
   schemas:
+    AuthProvider:
+      type: string
+      description: Fournisseur de connexion externe
+      enum: [google, tiktok, facebook]
+
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 320
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+        displayName:
+          type: string
+          maxLength: 100
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          maxLength: 320
+        password:
+          type: string
+          maxLength: 72
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+
+    TicketExchangeRequest:
+      type: object
+      required: [ticket]
+      properties:
+        ticket:
+          type: string
+
+    EmailUpdateRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 320
+
+    EmailVerificationRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+          example: '042517'
+
+    PreferredCategoriesRequest:
+      type: object
+      required: [categories]
+      properties:
+        categories:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Category'
+
+    User:
+      type: object
+      required: [id, emailVerified, providers, hasPassword, preferredCategories, categoriesChosen]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          description: Absente après une connexion TikTok (ou Facebook sans adresse) tant que l'utilisateur ne l'a pas saisie
+        emailVerified:
+          type: boolean
+        displayName:
+          type: string
+        providers:
+          type: array
+          description: Fournisseurs externes liés au compte
+          items:
+            $ref: '#/components/schemas/AuthProvider'
+        hasPassword:
+          type: boolean
+        preferredCategories:
+          type: array
+          description: Peut rester vide si l'utilisateur n'en a choisi aucune
+          items:
+            $ref: '#/components/schemas/Category'
+        categoriesChosen:
+          type: boolean
+          description: L'utilisateur est passé par l'écran des catégories (dernière étape de l'inscription)
+
+    AuthTokens:
+      type: object
+      required: [accessToken, refreshToken, expiresIn, user]
+      properties:
+        accessToken:
+          type: string
+          description: JWT à envoyer dans l'en-tête Authorization (Bearer)
+        refreshToken:
+          type: string
+          description: Jeton opaque à usage unique, à conserver dans un stockage sécurisé
+        expiresIn:
+          type: integer
+          description: Durée de validité du jeton d'accès, en secondes
+        user:
+          $ref: '#/components/schemas/User'
+
     Category:
       type: string
       enum: [SCIENCES, HISTOIRE, ECONOMIE, LANGUES, GEOGRAPHIE, ARTS, TECHNOLOGIE, SOCIETE]
@@ -245,7 +869,8 @@ components:
 
     VideoSource:
       type: string
-      enum: [YOUTUBE, INSTAGRAM, TIKTOK]
+      description: BRIN = vidéo envoyée directement sur Brin (lecteur plein écran, `playbackUrl`)
+      enum: [YOUTUBE, INSTAGRAM, TIKTOK, BRIN]
 
     Reliability:
       type: string
@@ -307,6 +932,14 @@ components:
         saved:
           type: boolean
           description: L'utilisateur a enregistré la vidéo
+        playbackUrl:
+          type: string
+          format: uri
+          description: Vidéo envoyée sur Brin (source BRIN), lien signé du fichier valable quelques heures
+        posterUrl:
+          type: string
+          format: uri
+          description: Vignette de la vidéo (YouTube, ou couverture fournie à la publication sur Brin)
 
     FeedPage:
       type: object
@@ -353,6 +986,91 @@ components:
               type:
                 type: string
                 enum: [ARTICLE, LIVRE, VIDEO, PODCAST, COURS]
+
+    UserStats:
+      type: object
+      required: [learnedCount, savedCount, publishedCount]
+      properties:
+        learnedCount:
+          type: integer
+          description: Vidéos marquées "J'ai appris" par l'utilisateur
+        savedCount:
+          type: integer
+          description: Vidéos enregistrées par l'utilisateur
+        publishedCount:
+          type: integer
+          description: Vidéos de l'utilisateur publiées sur Brin (acceptées par l'IA)
+
+    UploadRules:
+      type: object
+      required: [maxSizeBytes, minDurationSeconds, maxDurationSeconds, minAspectRatio, minShortSide, acceptedTypes, maxPending]
+      properties:
+        maxSizeBytes:
+          type: integer
+          format: int64
+        minDurationSeconds:
+          type: integer
+        maxDurationSeconds:
+          type: integer
+        minAspectRatio:
+          type: number
+          format: double
+          description: Hauteur / largeur minimale à l'affichage (1,78 = 9:16 ; vidéo verticale exigée)
+        minShortSide:
+          type: integer
+          description: Plus petite dimension minimale, en pixels
+        acceptedTypes:
+          type: array
+          items:
+            type: string
+          example: [video/mp4, video/quicktime]
+        maxPending:
+          type: integer
+          description: Vidéos en analyse simultanément au plus par utilisateur
+
+    UploadStatus:
+      type: string
+      enum: [ANALYSING, PUBLISHED, REJECTED]
+
+    Upload:
+      type: object
+      required: [id, title, status, createdAt, durationSeconds, playbackUrl, learnedCount, savedCount]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/UploadStatus'
+        rejectionReason:
+          type: string
+          description: Pourquoi l'IA ne l'a pas retenue (REJECTED)
+        category:
+          $ref: '#/components/schemas/Category'
+        score:
+          type: number
+          format: float
+        keyTakeaway:
+          type: string
+        durationSeconds:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        playbackUrl:
+          type: string
+          format: uri
+        posterUrl:
+          type: string
+          format: uri
+        learnedCount:
+          type: integer
+          description: Utilisateurs qui ont marqué "J'ai appris"
+        savedCount:
+          type: integer
+          description: Utilisateurs qui l'ont enregistrée
 
     ShareRequest:
       type: object
