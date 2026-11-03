@@ -1,0 +1,29 @@
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Eclipse / VS Code
+.classpath
+.project
+.settings/
+.vscode/
+bin/
+
+# Divers
+.DS_Store
+*.log
+
+# Secrets locaux
+.env
+.env.*
+application-local.yaml
+
+# Vidéos envoyées sur Brin (stockage local de dev)
+/data/
