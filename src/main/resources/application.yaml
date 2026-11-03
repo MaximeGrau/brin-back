@@ -35,7 +35,7 @@ spring:
   ai:
     google:
       genai:
-        api-key: ${GEMINI_API_KEY:AQ.Ab8RN6I3ZsK_3BIonB7sHnFQU8LwwLPC1vubYzAd9A-XcgwSJg}   # clé gratuite sur https://aistudio.google.com/apikey
+        api-key: ${GEMINI_API_KEY:placeholder-set-GEMINI_API_KEY}   # clé gratuite sur https://aistudio.google.com/apikey
         chat:
           model: ${GEMINI_CHAT_MODEL:gemini-3.5-flash-lite}   # version figée (pas un alias -latest) pour garder une classification stable
 
