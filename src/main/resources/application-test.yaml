@@ -28,7 +28,7 @@ brin:
     allowed-redirect-uris: [ "brin://", "exp://" ]
     # Compte de démo recréé à chaque démarrage (DemoAccountInitializer), adresse déjà vérifiée.
     demo-account:
-      email: ${BRIN_DEMO_EMAIL:maxime070530@gmail.com}
+      email: ${BRIN_DEMO_EMAIL:demo@brin.local}
       password: ${BRIN_DEMO_PASSWORD:azerty123}
       display-name: Maxime
 

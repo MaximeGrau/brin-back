@@ -1,49 +1,64 @@
 # brin-back
 
-Backend de **Brin** (nom provisoire) : import des shorts, classification par IA
-et API du feed consommée par l'app mobile [`brin-mobile`](https://github.com/MaximeGrau/brin-mobile).
+Backend of **Brin**, a mobile app for scrolling short videos in the TikTok / Instagram style, but showing
+only educational content. This service imports shorts from a curated list of YouTube channels, classifies
+them with an LLM, and serves the feed to the mobile app
+[`brin-mobile`](https://github.com/MaximeGrau/brin-mobile).
 
 **Java 25 · Spring Boot 4.1 · Spring AI 2.0 (Gemini) · Spring Data JPA · PostgreSQL · Flyway · Maven**
 
-## Démarrer
+> Brin started as a hands-on way to learn Spring AI and to see how a Spring service behaves when an LLM is
+> part of the request path. It is built with the help of coding agents (see [`CLAUDE.md`](CLAUDE.md)).
 
-Prérequis : JDK 25, Maven 3.9+, Docker (pour PostgreSQL), une clé API Gemini
-(gratuite sur [Google AI Studio](https://aistudio.google.com/apikey)).
+## Getting started
+
+Requirements: JDK 25, Maven 3.9+, Docker (for PostgreSQL), and a Gemini API key
+(free on [Google AI Studio](https://aistudio.google.com/apikey)).
 
 ```bash
-# Une seule fois : ajouter le wrapper Maven au projet (puis le committer)
-mvn -N wrapper:wrapper
-
-export GEMINI_API_KEY=ta-cle
-./mvnw spring-boot:run
+export GEMINI_API_KEY=your-key
+export YOUTUBE_API_KEY=your-key   # optional: without it, the YouTube import is skipped
+mvn spring-boot:run
 ```
 
-PostgreSQL démarre tout seul depuis `compose.yaml`.
+PostgreSQL starts automatically from `compose.yaml`.
 
 ```bash
 curl http://localhost:8080/actuator/health
 ```
 
-## Contract-first
+Build and run the tests:
 
-`src/main/resources/openapi/openapi.yaml` **fait foi**. À chaque build, le plugin
-`openapi-generator-maven-plugin` génère dans `target/generated-sources/openapi` :
+```bash
+mvn verify
+```
 
-- les interfaces Spring (`com.maximegrau.brin.api.FeedApi`, `InteractionsApi`, `VideosApi`, `LibraryApi`) ;
-- les DTO (`com.maximegrau.brin.api.model.*`).
+## Contract-first API
 
-Les contrôleurs implémenteront ces interfaces (ex. `FeedController implements FeedApi`).
+`src/main/resources/openapi/openapi.yaml` is the source of truth. On every build,
+`openapi-generator-maven-plugin` generates into `target/generated-sources/openapi`:
 
-Après une modification du contrat, recopier le fichier dans `brin-mobile/api/openapi.yaml`
-puis lancer `npm run api:generate` côté mobile.
+- the Spring interfaces (`com.maximegrau.brin.api.FeedApi`, `InteractionsApi`, `VideosApi`, `LibraryApi`);
+- the DTOs (`com.maximegrau.brin.api.model.*`).
 
-## Structure
+Controllers implement those interfaces (for example `FeedController implements FeedApi`).
+
+After a contract change, copy the file to `brin-mobile/api/openapi.yaml` and run `npm run api:generate`
+on the mobile side.
+
+## Project layout
 
 ```
-pom.xml                                   Dépendances + génération OpenAPI
-compose.yaml                              PostgreSQL de développement
+pom.xml                                   Dependencies + OpenAPI generation
+compose.yaml                              Development PostgreSQL
 src/main/java/com/maximegrau/brin/        Code (BrinApplication)
 src/main/resources/application.yaml       Configuration
-src/main/resources/openapi/openapi.yaml   Contrat d'API (source de vérité)
-src/main/resources/db/migration/          Migrations Flyway (V1__..., V2__...)
+src/main/resources/openapi/openapi.yaml   API contract (source of truth)
+src/main/resources/db/migration/          Flyway migrations (V1__..., V2__...)
 ```
+
+## Configuration
+
+Secrets are never committed: they are read from environment variables (`GEMINI_API_KEY`, `YOUTUBE_API_KEY`,
+`JWT_SECRET`, and the optional OAuth client ids and secrets). In production, `JWT_SECRET` is mandatory
+(32 random bytes, `openssl rand -base64 32`).

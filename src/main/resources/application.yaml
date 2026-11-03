@@ -71,7 +71,7 @@ brin:
         client-secret: ${FACEBOOK_APP_SECRET:}
 
   youtube:
-    api-key: ${YOUTUBE_API_KEY:AIzaSyDMyBTe9mQFigdCbYgZwEasSAHEjc1kY9g}
+    api-key: ${YOUTUBE_API_KEY:}   # vide = import YouTube désactivé
 
   import:
     cron: ${IMPORT_CRON:0 0 4 * * *}   # tous les jours à 4 h (Europe/Paris) ; "-" désactive

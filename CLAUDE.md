@@ -4,7 +4,7 @@ Réponds en **français**. Le développeur (Maxime) est dev backend Java expéri
 
 ## Le produit
 
-**Brin** (nom provisoire) : app de shorts au format "scroll vertical" où une IA ne garde que les vidéos qui permettent de se cultiver, notées et classées. Ce dépôt importe les vidéos, les fait classer par l'IA et sert le feed à l'app mobile (`brin-mobile`, Expo/React Native).
+**Brin** : app de shorts au format "scroll vertical" où une IA ne garde que les vidéos qui permettent de se cultiver, notées et classées. Ce dépôt importe les vidéos, les fait classer par l'IA et sert le feed à l'app mobile (`brin-mobile`, Expo/React Native).
 
 ## Stack
 
